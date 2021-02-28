@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Wallet</title>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="./wasm/SolCoreLightWalletCoreWasm.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script src="./js/qrcode.min.js"></script>
+    <link href="css/main.css" rel="stylesheet">
+</head>
+<body>
+<div class="page" id="loading" style="display:flex;align-items: center;justify-content: center">
+    <div class="loading"><div></div><div></div><div></div></div>
+</div>
+<div class="page" id="welcome">
+    <div class="welcome-block">
+        <h1>Welcome</h1>
+        <div class="sub-header">Keep all your bonuses in a safe place</div>
+        <div class="welcome-buttons">
+            <a href="#signin" class="btn invert">Sign in</a>
+            <a href="#signup" class="btn">Create an account</a>
+        </div>
+    </div>
+</div>
+<div class="page" id="signin">
+    <div class="logo"></div>
+    <h1>Sign in</h1>
+    <div class="border"></div>
+    <div class="form">
+        <div class="sub-header">Enter 12-word mnemonic phrase that you received during sign up:</div>
+        <textarea id="mnemonic-value" type="text" placeholder="12-word mnemonic phrase"></textarea>
+        <div>
+            <div class="btn" id="signin-submit">Sign in</div>
+        </div>
+        <div class="footer-msg">Don’t have an account? <a href="#signup">Sign up</a></div>
+    </div>
+</div>
+<div class="page" id="signup">
+    <div class="logo"></div>
+    <h1>Create a new account</h1>
+    <div class="border"></div>
+    <div class="form">
+        <div class="sub-header">Please write down this 12-word mnemonic phrase and keep it in a safe place.
+            You'll need this phrase to sign in to your wallet:
+        </div>
+        <div class="words" id="mnemonic"></div>
+
+        <div>
+            <input type="checkbox" class="checkbox" id="terms" checked>
+            <label for="terms">By creating an account, you agree to our
+                Terms and Conditions and confirm that you've wrote down the phrase</label>
+            <div class="btn" id="signup-submit">Submit</div>
+        </div>
+        <div class="footer-msg">Have an account already? <a href="#signin">Sign in</a></div>
+    </div>
+</div>
+<div class="page" id="balance">
+    <div class="logo"></div>
+    <h1>Your balance</h1>
+    <div class="border"></div>
+    <div>
+        <div class="balance-block">
+            <div id="balance-total">
+                <span>0</span>
+                <div>total</div>
+            </div>
+            <div id="balance-locked">
+                <span>0</span>
+                <div>locked</div>
+            </div>
+        </div>
+        <div class="form">
+            <div class="sub-header">Transaction to sign:</div>
+            <textarea id="transaction-code" type="text" placeholder="Enter transaction code to sign"></textarea>
+            <div>
+                <div class="btn" id="transaction-submit">Sign transaction</div>
+            </div>
+        </div>
+    </div>
+    <div class="bottom-nav">
+        <a href="#balance" class="home active"></a>
+        <a href="#profile" class="profile"></a>
+    </div>
+</div>
+
+<div class="page" id="transaction">
+
+    <h1><a href="#balance" class="back"></a>Success</h1>
+    <div class="border"></div>
+    <div>
+        <div class="sub-header">You've signed a new transaction, see the result below:</div>
+        <div id="transaction-result"></div>
+        <div id="transaction-qr"  style="margin-bottom:60px;"></div>
+    </div>
+    <div class="bottom-nav">
+        <a href="#balance" class="home active"></a>
+        <a href="#profile" class="profile"></a>
+    </div>
+</div>
+
+<div class="page" id="profile">
+    <div class="logo"></div>
+    <h1>Your profile</h1>
+    <div class="border"></div>
+    <div>
+        <div class="sub-header">Wallet address</div>
+        <div id="wallet-address"></div>
+        <div id="wallet-qr"></div>
+        <a href="#welcome" style="margin-bottom:60px;" onclick="localStorage.removeItem('mnemonic');" class="btn invert">Sign out</a>
+    </div>
+    <div class="bottom-nav">
+        <a href="#balance" class="home"></a>
+        <a href="#profile" class="profile active"></a>
+    </div>
+</div>
+<script>
+    var Account = {}
+    var Crypto = {
+        getRes: function (aRs) {
+            if (aRs.error) {
+                console.error(aRs.error);
+                return null;
+            }
+
+            if (aRs.data) {
+                return aRs.data;
+            }
+
+            console.error('Unknown result value: ' + JSON.stringify(aRs));
+
+            return null;
+        },
+        newMnemonicPhrase: function () {
+            return Crypto.getRes(Module.Wallet.new_mnemonic_phrase());
+        },
+        createWallet: function () {
+            if (!Account.wallet) {
+                Account.wallet = Crypto.getRes(Module.Wallet.new_wallet());
+                console.log("New wallet", Account.wallet);
+            }
+        },
+        importMnemonicPhrase: function (mnemonic) {
+            //New HD group from mnemonic phrase (we can add multiply HD groups, each will have unique ID)
+            console.log("New HD group...");
+
+            Account.hdGroupId = this.getRes(Account.wallet.add_hd_group(mnemonic, ''));
+            console.log("New HD group ID = " + Account.hdGroupId);
+
+            //New HD address from HD group
+            console.log("New HD addreess from HD group...");
+            Account.hdAddr = Crypto.getRes(Account.wallet.generate_next_hd_address(Account.hdGroupId));
+
+            console.log("New HD addreess...");
+            Account.addrName = Crypto.getRes(Account.hdAddr.name());
+
+            console.log("New address: " + Account.addrName);
+        },
+        signData(data) {
+            return this.getRes(Account.hdAddr.sign_data_base64(String(btoa(String(data)))));
+        }
+    };
+    var App = {
+        route: function (pageId) {
+            Crypto.createWallet();
+            pageId = $.trim(pageId).replace('#', '');
+            if (pageId == '') {
+                pageId = 'welcome';
+            }
+            if (pageId == 'welcome') {
+                if (localStorage.getItem('mnemonic')) {
+                    App.mnemonic = localStorage.getItem('mnemonic');
+                    Crypto.importMnemonicPhrase(App.mnemonic);
+                    App.request({
+                        "method": "find_client",
+                        "sid": "",
+                        "ts": 0,
+                        "args": null,
+                        "data": {
+                            "client_id": Account.addrName,
+                            "is_create_if_not_found": false
+                        }
+                    }, function(data){
+                        if (data.result.res == 'OK') {
+                            App.balance = data.data.balance;
+                            location.hash = 'balance'
+                        }
+                    })
+                }
+            }
+            if (pageId == 'signup') {
+                App.mnemonic = Crypto.newMnemonicPhrase();
+                $('#mnemonic').html(App.mnemonic);
+            }
+            if (pageId == 'balance' || pageId == 'profile') {
+                if (!App.addrName && !App.balance) {
+                    location.hash = 'welcome';
+                }
+                if ($("#wallet-address").text() != App.addrName) {
+                    $("#balance-total span").html(App.balance.total);
+                    $("#balance-locked span").html(App.balance.locked);
+
+                    $("#wallet-address").html(Account.addrName);
+                    $("#wallet-qr").empty();
+                    var qrcode = new QRCode("wallet-qr", {
+                        text: Account.addrName,
+                        width: 256,
+                        height: 256,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                }
+            }
+            App.showPage(pageId)
+        },
+        showPage: function (pageId) {
+            $('.page').hide();
+            $('#' + pageId).show();
+
+        },
+        request: function(data, callback){
+            $.ajax('https://api.gplatform.org/sol/api', {
+                data: JSON.stringify(data),
+                type: 'POST',
+                processData: false,
+                contentType: 'application/json',
+                success: (result) => {
+                    console.log(result)
+                    if ($.isFunction(callback)) callback(result)
+                }
+            });
+        },
+        signup: function(){
+            if (App.mnemonic < 12  || App.mnemonic.length < 12) {
+                toastr.error('Wrong mnemonic phrase', '', {timeOut: 1000});
+                return null;
+            }
+            Crypto.importMnemonicPhrase(App.mnemonic);
+            if (!App.reqLoading) {
+                App.reqLoading = 1;
+                App.request({
+                    "method": "find_client",
+                    "sid": "",
+                    "ts": 0,
+                    "args": null,
+                    "data": {
+                        "client_id": Account.addrName,
+                        "is_create_if_not_found": true
+                    }
+                }, function(data){
+                    App.reqLoading = 0;
+                    if (data.result.res == 'OK') {
+                        localStorage.setItem('mnemonic', App.mnemonic);
+                        App.balance = data.data.balance;
+                        location.hash = 'balance'
+                    }
+                })
+            }
+        },
+        signin: function(mnemonic){
+            console.log(mnemonic);
+            if (mnemonic.length < 12  || mnemonic.split(' ').length < 12) {
+                toastr.error('Wrong mnemonic phrase', '', {timeOut: 1000});
+                return null;
+            }
+            Crypto.importMnemonicPhrase(mnemonic);
+            if (!App.reqLoading) {
+                App.reqLoading = 1;
+                App.request({
+                    "method": "find_client",
+                    "sid": "",
+                    "ts": 0,
+                    "args": null,
+                    "data": {
+                        "client_id": Account.addrName,
+                        "is_create_if_not_found": false
+                    }
+                }, function(data){
+                    App.reqLoading = 0;
+                    if (data.result.res == 'OK') {
+                        $("#mnemonic-value").val('');
+                        localStorage.setItem('mnemonic', mnemonic);
+                        App.balance = data.data.balance;
+                        location.hash = 'balance'
+                    }
+                })
+            }
+        }
+    };
+
+    window.onhashchange = function () {
+        App.route(location.hash);
+    };
+    window.onload = function () {
+        App.loadInterval = setInterval(()=>{
+            if (Module.Wallet){
+                clearInterval(App.loadInterval)
+                App.route(location.hash)
+            }
+        }, 50);
+    };
+    $('#terms').on('change', ()=>{
+        if ($('#terms').is(':checked')){
+            $('#signup-submit').removeClass('disabled')
+        } else {
+            $('#signup-submit').addClass('disabled')
+        }
+    });
+    $('#mnemonic').on('click', ()=>{
+        var $temp = $("<input>");
+        $("body").append($temp);
+        $temp.val($('#mnemonic').text()).select();
+        document.execCommand("copy");
+        $temp.remove();
+        toastr.success('Copied to clipboard', '', {timeOut: 500})
+    });
+    $('#signup-submit').on('click', ()=>{
+        if (!$('#signup-submit').hasClass('disabled')){
+            App.signup();
+        }
+    })
+    $('#signin-submit').on('click', ()=>{
+        App.signin($("#mnemonic-value").val());
+    })
+
+    $('#transaction-submit').on('click', ()=>{
+        if ($.trim($("#transaction-code").val()) != '') {
+
+            var result = Crypto.signData($("#transaction-code").val())
+            $('#transaction-result').html(result)
+            $("#transaction-qr").empty();
+            var qrcode = new QRCode("transaction-qr", {
+                text: result,
+                width: 256,
+                height: 256,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+            $("#transaction-code").val('');
+            location.hash = 'transaction';
+        } else {
+            toastr.error('Empty transaction code', '', {timeOut: 1000})
+        }
+    })
+
+</script>
+</body>
+</html>

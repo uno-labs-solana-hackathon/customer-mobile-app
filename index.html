@@ -158,7 +158,7 @@
             console.log("New address: " + Account.addrName);
         },
         signData(data) {
-            return this.getRes(Account.hdAddr.sign_data_base64(String(btoa(String(data)))));
+            return this.getRes(Account.hdAddr.sign_data_base64(String(data)));
         }
     };
     var App = {
